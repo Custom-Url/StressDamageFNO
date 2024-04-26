@@ -57,7 +57,7 @@ device, is_logger = setup(config)
 # # Set up WandB logging
 wandb_init_args = None
 if config.wandb.log and is_logger:
-    wandb.login(key="4e31870235d5cf5bcbe8fa12a916362a75a51d9e")
+    wandb.login(key="insert-wandb-key")
     if config.wandb.name:
         wandb_name = config.wandb.name
     else:
