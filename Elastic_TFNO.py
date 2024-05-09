@@ -1,3 +1,4 @@
+
 """
 Can the Fourier Neural Operator Achieve Super Resolution for the Prediction of 
 Stress and Damage Fields in Composites?
@@ -328,7 +329,7 @@ def train():
 
     f1_scores = []
 
-    samples_to_test = 1000
+    samples_to_test = len(test_samples)
 
     for index in range(samples_to_test):
         data = test_samples[index]
