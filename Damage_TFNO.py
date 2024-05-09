@@ -1,3 +1,5 @@
+
+
 """
 Can the Fourier Neural Operator Achieve Super Resolution for the Prediction of 
 Stress and Damage Fields in Composites?
@@ -58,7 +60,7 @@ device, is_logger = setup(config)
 # # Set up WandB logging
 wandb_init_args = None
 if config.wandb.log and is_logger:
-    wandb.login(key="insert-wand-key")
+    wandb.login(key="insert-wandb-key")
     if config.wandb.name:
         wandb_name = config.wandb.name
     else:
@@ -113,6 +115,7 @@ shuffle = True
 # lst_dir0.append( r"F:/FYP/data/L0.05_vf0.6/h0.0002" )
 # dir_mesh = r"F:/FYP/data/mesh"
 
+
 #LAPTOP FILEPATH
 #-------------------------------------------------------
 # lst_dir0.append( r"D:/FYP/data/L0.05_vf0.25/h0.0002" )
@@ -151,6 +154,31 @@ for param_name, param_values in config.wandb.params.items():
 # Initialize a new sweep
 sweep_id = wandb.sweep(sweep_config, project="Damage")
 
+def compute_f1(out, sample):
+    f1_scores = []
+    # Iterate over samples to compute F1 score
+    for i in range(out.shape[0]):
+        # Convert prediction for the current sample to numpy array
+        y_pred = out[i].squeeze().detach().cpu().numpy()
+        # Ground truth for the current sample
+        y_true = sample['y'][i].squeeze().cpu().numpy()
+        
+        # Define a threshold value
+        threshold = 0.5
+        
+        # Convert continuous predictions to binary labels
+        y_pred_binary = (y_pred >= threshold).astype(int)
+        
+        # Convert continuous ground truth values to binary labels
+        y_true_binary = (y_true >= threshold).astype(int)
+        
+        # Compute F1 score
+        f1 = f1_score(y_true_binary, y_pred_binary, average='micro', zero_division=0)
+        f1_scores.append(f1)
+    f1_total = np.sum(f1_scores)
+    f1_tensor = torch.tensor(f1_total, dtype=torch.float32, device=out.device)
+    return f1_tensor
+
 def train():
     wandb.init(project="Damage")
     cfg = wandb.config
@@ -160,6 +188,7 @@ def train():
     config.opt.n_epochs = cfg.n_epochs
     config.opt.learning_rate = cfg.learning_rate
     config.opt.weight_decay = cfg.weight_decay
+    config.fno2d.n_layers = cfg.n_layers
 
     config.fno2d.data_channels = config.fno2d.in_channels
 
@@ -241,7 +270,7 @@ def train():
             f'Got training_loss={config.opt.training_loss} '
             f'but expected one of ["l2", "h1"]'
         )
-    eval_losses = {"h1": h1loss, "l2": l2loss}
+    eval_losses = {"h1": h1loss, "l2": l2loss, "f1": compute_f1}
 
     if config.verbose:
         print("\n### MODEL ###\n", model)
@@ -315,7 +344,7 @@ def train():
     y_true = []
     y_pred = []
 
-    samples_to_test = 1000
+    samples_to_test = len(test_samples)
 
     for index in range(samples_to_test):
         data = test_samples[index]
@@ -341,7 +370,7 @@ def train():
         y_true_binary = (y_true >= threshold).astype(int)
         
         # Compute F1 score
-        f1 = f1_score(y_true_binary, y_pred_binary, average='macro', zero_division=0)
+        f1 = f1_score(y_true_binary, y_pred_binary, average='micro', zero_division=0)
         
         f1_scores.append(f1)
     print("F1:", np.mean(f1_scores))
@@ -369,9 +398,9 @@ def train():
     if np.mean(f1_scores) > best_f1:
         print("PREVIOUS F1:", best_f1)
         best_f1 = np.mean(f1_scores)
-        print("NEW F1:", best_f1)
         # Save the current best model
         torch.save(model.state_dict(), best_model_path)
+        print("NEW F1:", best_f1)
 
 # Run the sweep
 wandb.agent(sweep_id, function=train)
