@@ -1,0 +1,157 @@
+default: &DEFAULT
+
+  #General
+  # For computing compression
+  n_params_baseline: None #If None, will be computed
+  verbose: True
+  arch: 'fno2d'
+
+  #Distributed computing
+  distributed:
+    use_distributed: False
+    wireup_info: 'mpi'
+    wireup_store: 'tcp'
+    model_parallel_size: 2
+    seed: 666
+
+  # FNO related
+  fno2d:
+    data_channels: 3
+    in_channels: 3
+    out_channels: 3
+    n_modes_height: 24
+    n_modes_width: 24
+    hidden_channels: 64
+    projection_channels: 256
+    n_layers: 4
+    domain_padding: 0.078125
+    domain_padding_mode: 'one-sided' #symmetric
+    fft_norm: 'forward'
+    norm: None
+    skip: 'soft-gating'
+    implementation: 'reconstructed'
+    
+    use_mlp: 1
+    mlp_expansion: 0.5
+    mlp_dropout: 0
+
+    separable: False
+    factorization: None
+    rank: 1.0
+    fixed_rank_modes: None
+    dropout: 0.2
+    tensor_lasso_penalty: 0.0
+    joint_factorization: False
+    fno_block_precision: 'full' # or 'half', 'mixed'
+    stabilizer: None # or 'tanh'
+
+  # Optimizer
+  opt:
+    n_epochs: 1000
+    learning_rate: 0.001
+    training_loss: 'l2'
+    weight_decay: 1e-5
+    amp_autocast: False
+
+    scheduler_T_max: 500  # For cosine only, typically take n_epochs
+    scheduler_patience: 5  # For ReduceLROnPlateau only
+    scheduler: 'StepLR'  # Or 'CosineAnnealingLR' OR 'ReduceLROnPlateau'
+    step_size: 100
+    gamma: 0.5
+
+  # Dataset related
+  data:
+    batch_size: 4
+    n_train: 200
+    train_resolution: 251
+    n_tests: [240] #, 100, 100] #, 1000]
+    test_resolutions: [251] #, 256, 512] #, 1024] 
+    test_batch_sizes: [4] #, 8, 4] #, 1]
+    positional_encoding: True
+
+    encode_input: True
+    encode_output: True
+    num_workers: 0
+    pin_memory: False
+    persistent_workers: False
+
+  # Patching
+  patching:
+    levels: 0 #1
+    padding: 0 #0.078125
+    stitching: True
+
+  # Weights and biases
+  wandb:
+    log: True
+    name: 'F1_Maximisation_Sweep' # If None, config will be used but you can override it here
+    group: 'TFNO' 
+    project: "Stress"
+    entity: "dylangray" # put your username here
+    sweep: False
+    log_output: True
+    log_test_interval: 1
+    
+    params:
+      n_epochs:
+        values: [1]
+      learning_rate:
+        values: [0.0001]
+      weight_decay:
+        values: [1e-5]
+      n_train:
+        values: [2000]
+    early_terminate:
+      type: hyperband
+      s: 2
+      eta: 3
+      max_iter: 10
+
+original_fno:
+  arch: 'tfno2d'
+
+  fno2d:
+    modes_height: 64
+    modes_width: 64
+    width: 64
+    hidden_channels: 256
+    n_layers: 4
+    domain_padding: 0.078125
+    domain_padding_mode: 'one-sided'
+    fft_norm: 'forward'
+    norm: None
+    skip: 'linear'
+    
+    use_mlp: 0
+    mlp:
+        expansion: 0.5
+        dropout: 0
+
+    separable: False
+    factorization: None
+    rank: 1.0
+    fixed_rank_modes: None
+
+  wandb:
+    log: False
+    name: None # If None, config will be used but you can override it here
+    group: 'wandb_group'
+    
+  
+distributed_mg_tucker:
+  tfno2d:
+    factorization: Tucker
+    compression: 0.42
+    domain_padding: 9
+
+  distributed:
+    use_distributed: True
+    wireup_info: 'mpi'
+    wireup_store: 'tcp'
+    model_parallel_size: 2
+    seed: 666
+
+  patching:
+    levels: 1
+    padding: 16
+    stitching: True
