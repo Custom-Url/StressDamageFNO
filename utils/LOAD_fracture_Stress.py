@@ -21,6 +21,8 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from matplotlib.gridspec import GridSpec
 
+import cv2
+
 
 
 # =====================
@@ -36,6 +38,7 @@ def vtkFieldReader(vtk_name, fieldName='tomo_Volume'):
     siz = [i - 1 for i in siz]
     mesh = vtk_to_numpy(data.GetCellData().GetArray(fieldName))
     return mesh.reshape(siz, order='F')
+
 
 def read_macroStressStrain(fname):
     with open(fname) as f:
@@ -123,6 +126,7 @@ def load_fracture_mesh_stress(lst_dir0, dir_mesh,
                               num_workers=2,
                               pin_memory=True, 
                               persistent_workers=True,
+                              target_resolution=(251, 251)
                               ):    
     
 
@@ -144,8 +148,13 @@ def load_fracture_mesh_stress(lst_dir0, dir_mesh,
             # input: mesh (data)
             iuc = re.findall(r"\d+", dir1)[0]
             img_name = dir_mesh + '/' + keyword + VF + '/' + 'h0.0002' + '/' + dir1 + '.vtk'
-            x.append(vtkFieldReader(img_name, 'tomo_Volume'))
-            
+            # Load the image
+            image = vtkFieldReader(img_name, 'tomo_Volume')
+            # Resize the image to target resolution
+            resized_image = cv2.resize(image, target_resolution)
+            resized_image = np.expand_dims(resized_image, axis=-1)
+            x.append(resized_image)
+           
                         
             # output: stress (filename)
             registerFileName(lst_stress = out_field,
@@ -157,14 +166,16 @@ def load_fracture_mesh_stress(lst_dir0, dir_mesh,
     # output: stress (data)
     nsamples = len(x)
     for i in range(nsamples):
-        output = np.zeros((251, 251, 0))
-        for key in out_field:          
-            output = np.concatenate( (output, vtkFieldReader(out_field[key][i], fieldName=vtk_field_name(key))), axis=2 )           
+        output = np.zeros((target_resolution[0], target_resolution[1], 0))
+        for key in out_field:      
+
+            mesh =  vtkFieldReader(out_field[key][i], fieldName=vtk_field_name(key))
+            mesh = np.expand_dims((cv2.resize(mesh, target_resolution)), axis=-1)
+            output = np.concatenate( (output, mesh), axis=2 )           
         y.append(output)
     
-    ##
-    x = np.expand_dims(np.array(x), 1)                       #BxCxWxHxD
-    y = np.expand_dims(np.moveaxis(np.array(y),-1,1),-1)     #BxCxWxHxD
+    x = np.expand_dims(np.array(x), 1)                      
+    y = np.expand_dims(np.moveaxis(np.array(y),-1,1),-1)     
 
     idx_train = np.random.choice(len(x), n_train)  #random shuffle
     x_train = torch.from_numpy(x[idx_train,:,:,:,0]).type(torch.float32).clone()
@@ -176,6 +187,9 @@ def load_fracture_mesh_stress(lst_dir0, dir_mesh,
     
     n_test = n_tests[0]  #currently, only 1 resolution possible
     idx_test = np.random.choice(np.setdiff1d(np.arange(len(x)),idx_train), n_test)
+    ###############################
+    idx_test = np.arange(0, len(x))
+    ###############################
     x_test = torch.from_numpy(x[idx_test,:,:,:,0]).type(torch.float32).clone()
     y_test = torch.from_numpy(y[idx_test,:,:,:,0]).type(torch.float32).clone()
     
@@ -201,7 +215,6 @@ def load_fracture_mesh_stress(lst_dir0, dir_mesh,
     if encode_output:
         if encoding == 'channel-wise':
             reduce_dims = list(range(y_train.ndim))
-            print("y_train ndim", y_train.ndim)
         elif encoding == 'pixel-wise':
             reduce_dims = [0]
 
